@@ -1,0 +1,3 @@
+watchdog>=4.0
+customtkinter>=5.2
+infi.systray>=0.1.12
