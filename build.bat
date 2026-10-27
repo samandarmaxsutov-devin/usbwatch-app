@@ -8,6 +8,9 @@ set PY=py
 echo === Installing dependencies ===
 %PY% -m pip install -r requirements.txt pyinstaller || goto :fail
 
+echo === Generating icon ===
+%PY% -m usbwatch.views.appicon "assets\usbwatch.ico" || goto :fail
+
 echo === Building USBWatch.exe ===
 %PY% -m PyInstaller --noconfirm --onefile --windowed --name USBWatch ^
     --icon "assets\usbwatch.ico" ^
