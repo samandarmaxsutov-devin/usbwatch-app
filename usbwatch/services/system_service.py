@@ -13,8 +13,9 @@ _NO_WINDOW = 0x08000000  # CREATE_NO_WINDOW
 try:
     _k32 = ctypes.windll.kernel32
     _shell32 = ctypes.windll.shell32
+    _cfgmgr = ctypes.windll.cfgmgr32
 except AttributeError:  # non-Windows (import safety)
-    _k32 = _shell32 = None
+    _k32 = _shell32 = _cfgmgr = None
 
 
 def is_admin() -> bool:
@@ -22,6 +23,43 @@ def is_admin() -> bool:
         return bool(_shell32.IsUserAnAdmin())
     except Exception:
         return False
+
+
+def relaunch_as_admin(args) -> bool:
+    """Start this program again elevated (UAC prompt) with `args`. True if it was launched."""
+    import sys
+    if getattr(sys, "frozen", False):
+        exe, params = sys.executable, list(args)
+    else:
+        exe = sys.executable
+        if exe.lower().endswith("python.exe") and os.path.exists(exe[:-10] + "pythonw.exe"):
+            exe = exe[:-10] + "pythonw.exe"
+        params = [os.path.abspath(sys.argv[0])] + list(args)
+    try:
+        rc = _shell32.ShellExecuteW(None, "runas", exe, subprocess.list2cmdline(params), None, 1)
+        return rc > 32
+    except Exception:
+        return False
+
+
+def device_present(instance_id) -> bool:
+    """True if the PnP device is plugged in now (works for disabled devices too). No PowerShell."""
+    if not _cfgmgr or not instance_id:
+        return False
+    inst = ctypes.c_uint32(0)
+    return _cfgmgr.CM_Locate_DevNodeW(ctypes.byref(inst), ctypes.c_wchar_p(instance_id), 0) == 0
+
+
+def device_disabled(instance_id) -> bool:
+    """True if the device is plugged in but disabled in Device Manager (CM_PROB_DISABLED)."""
+    if not _cfgmgr or not instance_id:
+        return False
+    inst, status, problem = ctypes.c_uint32(0), ctypes.c_uint32(0), ctypes.c_uint32(0)
+    if _cfgmgr.CM_Locate_DevNodeW(ctypes.byref(inst), ctypes.c_wchar_p(instance_id), 0) != 0:
+        return False
+    if _cfgmgr.CM_Get_DevNode_Status(ctypes.byref(status), ctypes.byref(problem), inst, 0) != 0:
+        return False
+    return bool(status.value & 0x400) and problem.value == 22   # DN_HAS_PROBLEM, CM_PROB_DISABLED
 
 
 def _drives_of_type(drive_type: int):

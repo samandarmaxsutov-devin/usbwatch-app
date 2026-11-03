@@ -112,8 +112,14 @@ _T = {
                           "list get the default action below."},
     "access.default_label": {"uz": "Ro'yxatda yo'q qurilmalar uchun:",
                              "ru": "Для устройств не из списков:", "en": "For devices in neither list:"},
-    "access.default_off": {"uz": "O'chiq", "ru": "Выкл", "en": "Off"},
-    "access.default_log": {"uz": "Faqat log qilish", "ru": "Только журнал", "en": "Log only"},
+    "access.enforce": {"uz": "Kirish nazorati", "ru": "Контроль доступа", "en": "Access control"},
+    "access.enforce_off_warn": {"uz": "Kirish nazorati o'chirilsa, «Bloklangan» ro'yxatidagi USB'lar "
+                                      "ham bloklanmaydi.\n\nO'chirilsinmi?",
+                                "ru": "Если выключить контроль доступа, USB из списка «Заблокированные» "
+                                      "тоже не будут блокироваться.\n\nВыключить?",
+                                "en": "With access control off, USB devices in the Blocked list are "
+                                      "not blocked either.\n\nTurn it off?"},
+    "access.default_allow": {"uz": "Ruxsat berish", "ru": "Разрешать", "en": "Allow"},
     "access.default_block": {"uz": "Bloklash", "ru": "Блокировать", "en": "Block"},
     "access.tab_all": {"uz": "Barcha qurilmalar", "ru": "Все устройства", "en": "All devices"},
     "access.tab_allowed": {"uz": "Ruxsat berilgan", "ru": "Разрешённые", "en": "Allowed"},

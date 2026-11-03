@@ -96,6 +96,11 @@ class Repository:
     def blocked_serials(self):
         return {r[0].upper() for r in self.db.execute("SELECT serial FROM blocked_devices")}
 
+    def block_failed_serials(self):
+        """Serials of devices a block attempt was reported as failed for."""
+        return {r[0].upper() for r in self.db.execute(
+            "SELECT DISTINCT serial FROM events WHERE action='Block failed' AND serial<>''")}
+
     def blocked_set(self, serial, pnp, ts):
         self.db.execute("INSERT OR REPLACE INTO blocked_devices VALUES(?,?,?)", (serial, pnp, ts))
 

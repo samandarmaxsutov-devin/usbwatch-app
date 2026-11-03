@@ -33,6 +33,17 @@ def update_cfg(**kw):
     return c
 
 
+def policy_settings(cfg: dict):
+    """(enforcement on, default action 'allow'|'block') for access control.
+
+    Migrates the old single `policy_mode` (off / blacklist / whitelist): its "off" also
+    ignored the Blocked list, so it maps to enforcement on with unknown devices allowed."""
+    mode = cfg.get("policy_mode", "off")
+    on = cfg.get("policy_on", True)
+    default = cfg.get("policy_default", "block" if mode == "whitelist" else "allow")
+    return bool(on), default
+
+
 # ---------- password ----------
 def _hash_pw(pw, salt):
     return hashlib.pbkdf2_hmac("sha256", pw.encode(), salt, 200_000).hex()
@@ -57,10 +68,14 @@ def check_password(pw) -> bool:
 
 
 # ---------- autostart ----------
-def _launch_cmd():
+_TASK_VER = 2   # bump to re-register existing tasks after changing their settings
+
+
+def _launch_parts():
+    """(executable, arguments) used to start the app in the background at logon."""
     import sys
     if getattr(sys, "frozen", False):            # the built .exe
-        return f'"{os.path.normpath(sys.executable)}" --autostart'
+        return os.path.normpath(sys.executable), "--autostart"
     exe = sys.executable
     if exe.lower().endswith("python.exe"):
         cand = exe[:-10] + "pythonw.exe"
@@ -69,7 +84,34 @@ def _launch_cmd():
     exe = os.path.normpath(exe)                   # use Windows backslashes
     entry = os.path.normpath(
         os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "run.py"))
-    return f'"{exe}" "{entry}" --autostart'
+    return exe, f'"{entry}" --autostart'
+
+
+def _launch_cmd():
+    exe, args = _launch_parts()
+    return f'"{exe}" {args}'
+
+
+def _register_task(highest: bool) -> bool:
+    """Register the logon task. Unlike plain `schtasks /Create`, this also runs on battery
+    power and is never stopped after the default 72-hour execution limit."""
+    exe, args = _launch_parts()
+
+    def q(s):
+        return "'" + s.replace("'", "''") + "'"
+    script = (
+        "$u=[Security.Principal.WindowsIdentity]::GetCurrent().Name;"
+        f"$a=New-ScheduledTaskAction -Execute {q(exe)} -Argument {q(args)} -WorkingDirectory {q(os.path.dirname(exe))};"
+        "$t=New-ScheduledTaskTrigger -AtLogOn -User $u; $t.Delay='PT10S';"
+        f"$p=New-ScheduledTaskPrincipal -UserId $u -LogonType Interactive -RunLevel {'Highest' if highest else 'Limited'};"
+        "$s=New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries "
+        "-ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -StartWhenAvailable;"
+        f"Register-ScheduledTask -TaskName {q(config.APP)} -Action $a -Trigger $t -Principal $p "
+        "-Settings $s -Force -ErrorAction Stop | Out-Null"
+    )
+    r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+                       capture_output=True, text=True, creationflags=_NO_WINDOW, timeout=60)
+    return r.returncode == 0
 
 
 def autostart_enabled() -> bool:
@@ -109,19 +151,20 @@ def harden_data_dir():
 
 
 def ensure_autostart():
-    """Enable autostart on first run so the app starts with Windows, and self-heal if a
-    previously registered command is stale (wrong path/interpreter after moving or rebuild).
+    """Enable autostart on first run so the app starts with Windows, and self-heal if the
+    registered task is stale: wrong path after moving/rebuilding, old task settings, or a
+    non-elevated task registered before the app ever ran as Administrator.
     The user may still turn it off in Settings; then it stays off."""
     cfg = load_cfg()
     want = _launch_cmd()
     try:
-        if not cfg.get("autostart_setup"):
-            if not autostart_enabled():
-                set_autostart(True)
-            update_cfg(autostart_setup=True, autostart_cmd=want)
-        elif cfg.get("autostart_cmd") != want and autostart_enabled():
-            set_autostart(True)                 # path changed -> re-register so reboot works
-            update_cfg(autostart_cmd=want)
+        if cfg.get("autostart_setup") and not autostart_enabled():
+            return                              # turned off by the user
+        stale = (cfg.get("autostart_cmd") != want or cfg.get("autostart_ver") != _TASK_VER
+                 or (system_service.is_admin() and not cfg.get("autostart_admin")))
+        if not cfg.get("autostart_setup") or stale:
+            set_autostart(True)
+            update_cfg(autostart_setup=True, autostart_cmd=want, autostart_ver=_TASK_VER)
     except Exception:
         pass
 
@@ -130,26 +173,29 @@ def set_autostart(on: bool) -> str:
     import winreg
     cmd = _launch_cmd()
     if on:
-        # clear any stale task first, then register fresh
-        subprocess.run(["schtasks", "/Delete", "/TN", config.APP, "/F"], capture_output=True)
-        r = subprocess.run(["schtasks", "/Create", "/TN", config.APP, "/TR", cmd,
-                            "/SC", "ONLOGON", "/RL", "HIGHEST", "/F"], capture_output=True, text=True)
-        if r.returncode == 0:
+        # elevated: the task starts the app as Administrator at logon with no UAC prompt
+        if system_service.is_admin() and _register_task(highest=True):
+            update_cfg(autostart_admin=True)
+            _delete_run_key()
             return "Autostart enabled (scheduled task, highest privileges)."
-        # not elevated: a normal logon task still runs at sign-in
-        r2 = subprocess.run(["schtasks", "/Create", "/TN", config.APP, "/TR", cmd,
-                             "/SC", "ONLOGON", "/F"], capture_output=True, text=True)
-        if r2.returncode == 0:
-            return "Autostart enabled (logon task)."
+        update_cfg(autostart_admin=False)
+        if _register_task(highest=False):        # not elevated: a normal logon task
+            _delete_run_key()
+            return "Autostart enabled (logon task). Run USBWatch as Administrator once to enable blocking at startup."
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
                             r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_SET_VALUE) as k:
             winreg.SetValueEx(k, config.APP, 0, winreg.REG_SZ, cmd)
         return "Autostart enabled (Run key)."
     subprocess.run(["schtasks", "/Delete", "/TN", config.APP, "/F"], capture_output=True)
+    _delete_run_key()
+    return "Autostart disabled."
+
+
+def _delete_run_key():
+    import winreg
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
                             r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_SET_VALUE) as k:
             winreg.DeleteValue(k, config.APP)
     except OSError:
         pass
-    return "Autostart disabled."

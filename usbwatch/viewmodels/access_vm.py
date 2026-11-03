@@ -1,16 +1,12 @@
-"""Access Control: separate Allowed (whitelist) and Blocked (blacklist) lists, plus a
-default action (log-only or block) for devices that are in neither list."""
+"""Access Control: an on/off switch, separate Allowed (whitelist) and Blocked (blacklist)
+lists, and a default action (allow or block) for devices that are in neither list."""
 from .. import util
 from ..core import Observable
-from ..services import audit_service
+from ..services import audit_service, settings_service
 from .base import ViewModel
 
 ALL_COLUMNS = ("col.name", "col.serial", "col.last_connected", "col.list", "col.state")
 LIST_COLUMNS = ("col.name", "col.serial", "col.last_connected", "col.state")
-
-# default action <-> monitor policy mode
-_DEFAULT_TO_MODE = {"off": "off", "log": "blacklist", "block": "whitelist"}
-_MODE_TO_DEFAULT = {"off": "off", "blacklist": "log", "whitelist": "block"}
 
 
 class AccessVM(ViewModel):
@@ -19,7 +15,9 @@ class AccessVM(ViewModel):
         self.all_rows = Observable([])
         self.allowed_rows = Observable([])
         self.blocked_rows = Observable([])
-        self.default_action = Observable(_MODE_TO_DEFAULT.get(self.cfg.get("policy_mode", "off"), "off"))
+        on, default = settings_service.policy_settings(self.cfg)
+        self.enforce_on = Observable(on)
+        self.default_action = Observable(default)
 
     # ---- data ----
     def _state(self, sid, blocked, now):
@@ -55,7 +53,9 @@ class AccessVM(ViewModel):
         self.all_rows.set(all_rows)
         self.allowed_rows.set(allowed)
         self.blocked_rows.set(blocked_list)
-        self.default_action.set(_MODE_TO_DEFAULT.get(self.cfg.get("policy_mode", "off"), "off"))
+        on, default = settings_service.policy_settings(self.cfg)
+        self.enforce_on.set(on)
+        self.default_action.set(default)
 
     # ---- commands ----
     def set_kind(self, serials, kind):
@@ -87,8 +87,15 @@ class AccessVM(ViewModel):
                           serial.strip(), "added manually")
         self.shell.policy_changed()
 
+    def set_enforce(self, on):
+        self.shell.set_cfg(policy_on=bool(on))
+        audit_service.log("Policy", "Access control", "on" if on else "off")
+        self.shell.policy_changed()
+        self.enforce_on.set(bool(on))
+
     def set_default(self, action):
-        self.shell.set_cfg(policy_mode=_DEFAULT_TO_MODE.get(action, "off"))
+        action = "block" if action == "block" else "allow"
+        self.shell.set_cfg(policy_default=action)
         audit_service.log("Policy", "Default action", action)
         self.shell.policy_changed()
         self.default_action.set(action)

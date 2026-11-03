@@ -17,15 +17,17 @@ class AccessView(BaseView):
 
         widgets.header(p, self.t("nav.access"))
 
-        # default action for devices in neither list
+        # master on/off switch, then the default action for devices in neither list
         row = ctk.CTkFrame(p, fg_color="transparent")
         row.grid(row=2, column=0, sticky="w", pady=(0, 12))
+        self.enforce_var = ctk.BooleanVar(value=self.vm.enforce_on.value)
+        ctk.CTkSwitch(row, text=self.t("access.enforce"), variable=self.enforce_var,
+                      command=self._toggle_enforce).pack(side="left", padx=(0, 28))
         ctk.CTkLabel(row, text=self.t("access.default_label")).pack(side="left", padx=(0, 10))
-        self._off = self.t("access.default_off")
-        self._log = self.t("access.default_log")
+        self._allow = self.t("access.default_allow")
         self._block = self.t("access.default_block")
         self.default_btn = ctk.CTkSegmentedButton(
-            row, values=[self._off, self._log, self._block], command=self._change_default,
+            row, values=[self._allow, self._block], command=self._change_default,
             selected_color="#0d9488", selected_hover_color="#0f766e",
             unselected_color=theme.BTN2, unselected_hover_color=theme.BTN2H, text_color=theme.TEXT)
         self.default_btn.pack(side="left")
@@ -46,9 +48,10 @@ class AccessView(BaseView):
         self.bind_obs(self.vm.all_rows, lambda r: widgets.fill_tree(self.all_tree, r))
         self.bind_obs(self.vm.allowed_rows, lambda r: widgets.fill_tree(self.allow_tree, r))
         self.bind_obs(self.vm.blocked_rows, lambda r: widgets.fill_tree(self.block_tree, r))
-        self._action_label = {"off": self._off, "log": self._log, "block": self._block}
+        self._action_label = {"allow": self._allow, "block": self._block}
         self.bind_obs(self.vm.default_action,
-                      lambda a: self.default_btn.set(self._action_label.get(a, self._off)))
+                      lambda a: self.default_btn.set(self._action_label.get(a, self._allow)))
+        self.bind_obs(self.vm.enforce_on, self._show_enforce)
 
     def on_show(self):
         self.vm.reload()
@@ -103,9 +106,20 @@ class AccessView(BaseView):
         if sid and sid.strip():
             self.vm.add_manual(sid, kind)
 
+    def _show_enforce(self, on):
+        self.enforce_var.set(on)
+        self.default_btn.configure(state="normal" if on else "disabled")
+
+    def _toggle_enforce(self):
+        on = self.enforce_var.get()
+        if not on and not messagebox.askyesno(config.APP, self.t("access.enforce_off_warn")):
+            self.enforce_var.set(True)
+            return
+        self.vm.set_enforce(on)
+
     def _change_default(self, value):
-        action = {self._off: "off", self._log: "log", self._block: "block"}.get(value, "off")
+        action = "block" if value == self._block else "allow"
         if action == "block" and not messagebox.askyesno(config.APP, self.t("access.whitelist_warn")):
-            self.default_btn.set(self._action_label.get(self.vm.default_action.value, self._off))
+            self.default_btn.set(self._action_label.get(self.vm.default_action.value, self._allow))
             return
         self.vm.set_default(action)

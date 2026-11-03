@@ -28,6 +28,8 @@ class ShellViewModel:
         self.storage_devices = []       # list[Device] shown on the Devices tab
         self._dev_result = None
         self._inv_result = None
+        self._unblocking = set()        # serials with an Enable-PnpDevice call in flight
+        self._unblock_tried = set()     # serials already retried while plugged in
         self.tick_n = 0
 
         # shared observables (sidebar / stats)
@@ -82,10 +84,11 @@ class ShellViewModel:
         self.storage_devices = sorted(devs, key=lambda d: d.last_connect or "", reverse=True)
         now = {self.mon.serials[d].upper() for d in self.mon.known if self.mon.serials.get(d)}
         blocked = self.repo.blocked_serials()
+        from ..services import system_service
         for d in self.storage_devices:        # live status without any PowerShell call
             sid = d.serial.upper()
             d.connected = sid in now
-            d.disabled = sid in blocked
+            d.disabled = sid in blocked or system_service.device_disabled(d.instance_id)
         self.names = {d.serial.upper(): d.name for d in self.storage_devices}
         self.devices_vm.apply(self.storage_devices)
         self.known_count.value = len(self.storage_devices)
@@ -112,8 +115,10 @@ class ShellViewModel:
     # ---- policy ----
     def sync_policy(self):
         rows = self.repo.policy_all()
+        on, default = settings_service.policy_settings(self.cfg)
         self.mon.policy = {
-            "mode": self.cfg.get("policy_mode", "off"),
+            "on": on,
+            "default": default,
             "allow": {s.upper() for s, k, _n in rows if k == "allow"},
             "block": {s.upper() for s, k, _n in rows if k == "block"},
         }
@@ -121,15 +126,54 @@ class ShellViewModel:
     def policy_changed(self):
         self.sync_policy()
         self.mon.enforce_now()
-        for serial, pnp in self.repo.blocked_all():
-            if self.mon.allowed(serial):
-                threading.Thread(target=self._enable, args=(serial, pnp), daemon=True).start()
+        self._unblock_tried.clear()
+        self.retry_unblocks(force=True)
         self.access_vm.reload()
 
+    def retry_unblocks(self, force=False):
+        """Re-enable devices we disabled earlier that the policy now allows.
+
+        A device that was unplugged (or the app was not elevated) when it got whitelisted
+        stays disabled in Windows, so it never mounts again. Retry once each time such a
+        device is plugged in; `force` tries every one right away (after a policy change)."""
+        from ..services import system_service
+        if not force and not system_service.is_admin():
+            return
+        targets = list(self.repo.blocked_all())
+        # Devices left disabled by an older build that logged "Block failed" but still
+        # disabled them: they never made it into blocked_devices, so adopt them here.
+        known = {s.upper() for s, _p in targets}
+        failed = self.repo.block_failed_serials()
+        for d in self.storage_devices:
+            sid = d.serial.upper()
+            if sid in failed and sid not in known and system_service.device_disabled(d.instance_id):
+                targets.append((d.serial, d.instance_id))
+        for serial, pnp in targets:
+            sid = serial.upper()
+            if not self.mon.allowed(serial) or sid in self._unblocking:
+                continue
+            if not force:
+                if not system_service.device_present(pnp):
+                    self._unblock_tried.discard(sid)   # retry on the next plug-in
+                    continue
+                if sid in self._unblock_tried:
+                    continue
+            self._unblock_tried.add(sid)
+            self._unblocking.add(sid)
+            threading.Thread(target=self._enable, args=(serial, pnp), daemon=True).start()
+
     def _enable(self, serial, pnp):
-        from ..services import pnp_service
-        ok = pnp_service.set_device_enabled(pnp, True)
-        self.q.put((util.now_str(), "", "Unblocked" if ok else "Unblock failed", pnp, "", "", serial))
+        from ..services import pnp_service, system_service
+        try:
+            if not system_service.is_admin():
+                self.q.put((util.now_str(), "", "Unblock failed", pnp,
+                            "Run USBWatch as Administrator", "", serial))
+                return
+            ok = pnp_service.set_device_enabled(pnp, True)
+            self.q.put((util.now_str(), "", "Unblocked" if ok else "Unblock failed", pnp,
+                        "" if ok else "Windows refused to enable the device", "", serial))
+        finally:
+            self._unblocking.discard(serial.upper())
 
     # ---- capacity ----
     def save_capacity(self):
@@ -238,9 +282,13 @@ class ShellViewModel:
                 audit_service.log("Enforcement", r[2], r[6], r[4])   # action, serial, details
             if enforce:
                 self.access_vm.reload()
+            if any(r[2] in ("Blocked", "Unblocked") for r in new):
+                self.load_devices()          # refresh the Disabled / Connected state
         if offline:
             self.activity_vm.reload()
 
+        if self.tick_n % 5 == 0:
+            self.retry_unblocks()
         if self.tick_n % 3 == 1:
             self.refresh_drives()
         if self.tick_n % 10 == 0:

@@ -66,17 +66,21 @@ class Monitor:
     def __init__(self, q):
         self.q = q
         self.obs, self.known, self.serials, self.pnps = {}, set(), {}, {}
-        self.policy = {"mode": "off", "allow": set(), "block": set()}
+        self.policy = {"on": False, "default": "allow", "allow": set(), "block": set()}
         self.usb_fixed, self._last_fixed, self._refreshing = set(), None, False
+        self._enforcing = set()       # drives with a block attempt in flight
 
     # ---- policy ----
     def allowed(self, serial):
+        """Blocked list always wins, then the allowed list, then the default action."""
         p, s = self.policy, (serial or "").upper()
-        if p["mode"] in ("blacklist", "whitelist") and s in p["block"]:
+        if not p["on"]:
+            return True
+        if s in p["block"]:
             return False
-        if p["mode"] == "whitelist":
-            return s in p["allow"]
-        return True
+        if s in p["allow"]:
+            return True
+        return p["default"] != "block"
 
     def _block(self, d, serial, pnp):
         if d[:2].upper() == system_service.system_drive():
@@ -88,6 +92,9 @@ class Monitor:
             self.q.put((_now(), d, "Block failed", d, "Run USBWatch as Administrator", "", serial))
             return False
         ok = pnp_service.set_device_enabled(pnp, False)
+        # Disable-PnpDevice can report an error (e.g. volume busy) yet still disable the
+        # device; record it as Blocked then, or it could never be unblocked later.
+        ok = ok or system_service.device_disabled(pnp)
         self.q.put((_now(), d, "Blocked" if ok else "Block failed", d,
                     pnp if ok else "Windows refused to disable the device", "", serial))
         return ok
@@ -95,14 +102,29 @@ class Monitor:
     def enforce_now(self):
         for d in list(self.known):
             sid = self.serials.get(d)
-            if sid and not self.allowed(sid):
+            if sid and not self.allowed(sid) and d not in self._enforcing:
+                self._enforcing.add(d)
                 threading.Thread(target=self._enforce, args=(d, sid), daemon=True).start()
 
     def _enforce(self, d, sid):
-        if self._block(d, sid, self.pnps.get(d, "")):
+        try:
+            # Our own watcher holds an open handle on the drive; Windows vetoes disabling a
+            # device that is in use, so release it first and watch again if blocking fails.
             o = self.obs.pop(d, None)
             if o:
                 o.stop()
+                o.join(5)
+            if not self._block(d, sid, self.pnps.get(d, "")) and o and d in self.known:
+                self.obs[d] = self._observe(d, sid)
+        finally:
+            self._enforcing.discard(d)
+
+    def _observe(self, d, serial):
+        o = Observer()
+        o.schedule(Handler(d, self.q, serial), d, recursive=True)
+        o.daemon = True
+        o.start()
+        return o
 
     # ---- drive lifecycle ----
     def _start(self, d):
@@ -115,10 +137,7 @@ class Monitor:
         if (not pnp or pnp.upper().startswith("USBSTOR\\")) and not self.allowed(serial):
             if self._block(d, serial, pnp):
                 return
-        o = Observer()
-        o.schedule(Handler(d, self.q, serial), d, recursive=True)
-        o.daemon = True
-        o.start()
+        o = self._observe(d, serial)
         if d not in self.known:       # removed while we were resolving
             o.stop()
             return
