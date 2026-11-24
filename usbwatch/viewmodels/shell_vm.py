@@ -115,13 +115,12 @@ class ShellViewModel:
     # ---- policy ----
     def sync_policy(self):
         rows = self.repo.policy_all()
-        on, default = settings_service.policy_settings(self.cfg)
         self.mon.policy = {
-            "on": on,
-            "default": default,
+            "on": bool(self.cfg.get("acl_on", True)),
             "allow": {s.upper() for s, k, _n in rows if k == "allow"},
             "block": {s.upper() for s, k, _n in rows if k == "block"},
         }
+        self.mon.ready = True
 
     def policy_changed(self):
         self.sync_policy()

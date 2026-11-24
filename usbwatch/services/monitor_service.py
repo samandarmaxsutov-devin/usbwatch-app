@@ -66,21 +66,19 @@ class Monitor:
     def __init__(self, q):
         self.q = q
         self.obs, self.known, self.serials, self.pnps = {}, set(), {}, {}
-        self.policy = {"on": False, "default": "allow", "allow": set(), "block": set()}
+        self.policy = {"on": True, "allow": set(), "block": set()}
+        self.ready = False            # don't block anything before the policy is loaded
         self.usb_fixed, self._last_fixed, self._refreshing = set(), None, False
         self._enforcing = set()       # drives with a block attempt in flight
 
     # ---- policy ----
     def allowed(self, serial):
-        """Blocked list always wins, then the allowed list, then the default action."""
+        """Only devices on the Allowed list may be used; Blocked and unlisted ones are disabled.
+        With access control switched off every device is allowed."""
         p, s = self.policy, (serial or "").upper()
-        if not p["on"]:
+        if not self.ready or not p["on"]:
             return True
-        if s in p["block"]:
-            return False
-        if s in p["allow"]:
-            return True
-        return p["default"] != "block"
+        return s in p["allow"] and s not in p["block"]
 
     def _block(self, d, serial, pnp):
         if d[:2].upper() == system_service.system_drive():

@@ -1,101 +1,95 @@
-"""Access Control: an on/off switch, separate Allowed (whitelist) and Blocked (blacklist)
-lists, and a default action (allow or block) for devices that are in neither list."""
+"""Access Control: only USB storage devices on the Allowed list may be used; every other
+device (blocked or never allowed) is disabled as soon as it is plugged in."""
 from .. import util
 from ..core import Observable
-from ..services import audit_service, settings_service
+from ..services import audit_service, system_service
 from .base import ViewModel
 
-ALL_COLUMNS = ("col.name", "col.serial", "col.last_connected", "col.list", "col.state")
-LIST_COLUMNS = ("col.name", "col.serial", "col.last_connected", "col.state")
+COLUMNS = ("col.access", "col.name", "col.serial", "col.state", "col.last_connected")
+FILTERS = ("all", "allow", "block")
 
 
 class AccessVM(ViewModel):
     def __init__(self, shell):
         super().__init__(shell)
-        self.all_rows = Observable([])
-        self.allowed_rows = Observable([])
-        self.blocked_rows = Observable([])
-        on, default = settings_service.policy_settings(self.cfg)
-        self.enforce_on = Observable(on)
-        self.default_action = Observable(default)
+        self.rows = Observable([])            # every known device, unfiltered
+        self.filter = Observable("all")       # one of FILTERS
+        self.counts = Observable({"allow": 0, "block": 0, "connected": 0})
+        self.is_admin = Observable(system_service.is_admin())
+        self.enforce_on = Observable(bool(self.cfg.get("acl_on", True)))
 
     # ---- data ----
-    def _state(self, sid, blocked, now):
-        if sid in blocked:
-            return "blocked"
-        if sid in now:
-            return "connected"
-        return ""
-
     def reload(self):
         from ..i18n import t
-        pol = {s.upper(): (k, n) for s, k, n in self.repo.policy_all()}
-        blocked = self.repo.blocked_serials()
+        allowed = {s.upper(): n for s, k, n in self.repo.policy_all() if k == "allow"}
+        disabled = self.repo.blocked_serials()
         now = {self.mon.serials[d].upper() for d in self.mon.known if self.mon.serials.get(d)}
-        info = {d.serial.upper(): (d.name, d.last_connect) for d in self.shell.storage_devices}
-        label = {"allow": t("access.tab_allowed"), "block": t("access.tab_blocked")}
 
-        def state_text(sid):
-            s = self._state(sid, blocked, now)
-            return (t("access.state_blocked") if s == "blocked"
-                    else t("access.state_connected") if s == "connected" else "")
+        devices = [(d.serial.upper(), d.name, d.last_connect, d.disabled)
+                   for d in self.shell.storage_devices]
+        seen = {sid for sid, *_ in devices}
+        devices += [(sid, name or t("access.manual_name"), "", False)       # allowed by serial,
+                    for sid, name in allowed.items() if sid not in seen]  # never plugged in
 
-        all_rows, allowed, blocked_list = [], [], []
-        for d in self.shell.storage_devices:
-            sid = d.serial.upper()
-            kind = pol.get(sid, ("", ""))[0]
-            all_rows.append({"iid": sid, "tag": kind,
-                             "values": (d.name, sid, d.last_connect, label.get(kind, "—"), state_text(sid))})
-        for sid, (kind, name) in pol.items():
-            nm, last = info.get(sid, (name or "(not in history)", ""))
-            row = {"iid": sid, "tag": kind, "values": (nm, sid, last, state_text(sid))}
-            (allowed if kind == "allow" else blocked_list).append(row)
-        self.all_rows.set(all_rows)
-        self.allowed_rows.set(allowed)
-        self.blocked_rows.set(blocked_list)
-        on, default = settings_service.policy_settings(self.cfg)
+        on = bool(self.cfg.get("acl_on", True))
+        blocked_label = t("access.blocked" if on else "access.not_allowed")
+        rows, counts = [], {"allow": 0, "block": 0, "connected": 0}
+        for sid, name, last, dev_disabled in devices:
+            kind = "allow" if sid in allowed else "block"
+            counts[kind] += 1
+            if sid in now:
+                counts["connected"] += 1
+                state = t("access.state_connected")
+            elif sid in disabled or dev_disabled:
+                state = t("access.state_blocked")
+            else:
+                state = t("access.state_offline")
+            access = "●  " + (t("access.allowed") if kind == "allow" else blocked_label)
+            tags = (("acl_block",) if kind == "block" and on else ()) + (("acl_live",) if sid in now else ())
+            rows.append({"iid": sid, "kind": kind, "tag": tags,
+                         "values": (access, name, sid, state, last)})
+        rows.sort(key=lambda r: (r["kind"] != "block", r["values"][2] not in now, r["values"][1].lower()))
+        self.rows.set(rows)
+        self.counts.set(counts)
+        self.is_admin.set(system_service.is_admin())
         self.enforce_on.set(on)
-        self.default_action.set(default)
+
+    def visible_rows(self):
+        f = self.filter.value
+        return [r for r in self.rows.value if f == "all" or r["kind"] == f]
+
+    def set_filter(self, f):
+        self.filter.set(f if f in FILTERS else "all")
 
     # ---- commands ----
-    def set_kind(self, serials, kind):
-        """kind: 'allow' | 'block' | None (remove)."""
+    def set_enforce(self, on):
+        """Switch access control on/off. Off re-enables every device we blocked."""
+        self.shell.set_cfg(acl_on=bool(on))
+        audit_service.log("Policy", "Access control", "on" if on else "off")
+        self.shell.policy_changed()
+
+    def set_allowed(self, serials, allow):
+        """Allow the selected devices, or take their permission away (= blocked)."""
         if not serials:
             from ..i18n import t
             return t("access.select_first")
         now = util.now_str()
-        names = {r["iid"]: r["values"][0]
-                 for src in (self.all_rows, self.allowed_rows, self.blocked_rows)
-                 for r in src.value}
+        names = {r["iid"]: r["values"][1] for r in self.rows.value}
         for sid in serials:
-            if kind is None:
-                self.repo.policy_del(sid)
+            if allow:
+                self.repo.policy_set(sid, "allow", names.get(sid, ""), now)
             else:
-                self.repo.policy_set(sid, kind, names.get(sid, ""), now)
-            audit_service.log("Policy", {"allow": "Allow", "block": "Block"}.get(kind, "Remove"),
-                              names.get(sid, sid), sid)
+                self.repo.policy_del(sid)
+            audit_service.log("Policy", "Allow" if allow else "Block", names.get(sid, sid), sid)
         self.repo.commit()
         self.shell.policy_changed()
         return None
 
-    def add_manual(self, serial, kind):
-        if not serial or not serial.strip():
+    def add_manual(self, serial):
+        serial = (serial or "").strip()
+        if not serial:
             return
-        self.repo.policy_set(serial.strip(), kind, "(added manually)", util.now_str())
+        self.repo.policy_set(serial, "allow", "", util.now_str())
         self.repo.commit()
-        audit_service.log("Policy", "Allow" if kind == "allow" else "Block",
-                          serial.strip(), "added manually")
+        audit_service.log("Policy", "Allow", serial, "added manually")
         self.shell.policy_changed()
-
-    def set_enforce(self, on):
-        self.shell.set_cfg(policy_on=bool(on))
-        audit_service.log("Policy", "Access control", "on" if on else "off")
-        self.shell.policy_changed()
-        self.enforce_on.set(bool(on))
-
-    def set_default(self, action):
-        action = "block" if action == "block" else "allow"
-        self.shell.set_cfg(policy_default=action)
-        audit_service.log("Policy", "Default action", action)
-        self.shell.policy_changed()
-        self.default_action.set(action)

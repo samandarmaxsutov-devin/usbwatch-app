@@ -15,13 +15,17 @@ _PALETTES = {
     "dark": dict(BG="#16181d", PANEL="#1e2128", SIDE="#12141a", ACCENT="#3b82f6",
                  TEXT="#e5e7eb", MUTED="#9ca3af", HEAD="#272b34", HEAD_ACTIVE="#323744",
                  EVEN="#1e2128", ODD="#23272f", SEL="#3b82f6", SELFG="white", SCROLL="#2b303b",
-                 BTN2="#2b303b", BTN2H="#374151", DANGER="#7f1d1d", DANGERH="#991b1b",
-                 SIDE_HOVER="#242833", ACCENT_HOVER="#2f6fd6"),
+                 BTN2="#2b303b", BTN2H="#374151", DANGER="#b91c1c", DANGERH="#991b1b",
+                 SIDE_HOVER="#242833", ACCENT_HOVER="#2f6fd6",
+                 SUCCESS="#34d399", DANGER_TEXT="#f87171", SUCCESS_BTN="#059669", SUCCESS_BTNH="#047857",
+                 ROW_BLOCK="#fca5a5", WARN="#fbbf24"),
     "light": dict(BG="#f4f5f7", PANEL="#ffffff", SIDE="#eceef1", ACCENT="#2563eb",
                   TEXT="#111827", MUTED="#6b7280", HEAD="#e5e7eb", HEAD_ACTIVE="#d8dbe0",
                   EVEN="#ffffff", ODD="#f3f4f6", SEL="#2563eb", SELFG="white", SCROLL="#c7ccd4",
                   BTN2="#e5e7eb", BTN2H="#d1d5db", DANGER="#dc2626", DANGERH="#b91c1c",
-                  SIDE_HOVER="#dde1e6", ACCENT_HOVER="#1d4ed8"),
+                  SIDE_HOVER="#dde1e6", ACCENT_HOVER="#1d4ed8",
+                  SUCCESS="#059669", DANGER_TEXT="#dc2626", SUCCESS_BTN="#059669", SUCCESS_BTNH="#047857",
+                  ROW_BLOCK="#b91c1c", WARN="#d97706"),
 }
 
 TAG_COLORS = {
@@ -36,6 +40,7 @@ TAG_COLORS = {
 # current palette (module globals; reassigned by apply())
 BG = PANEL = SIDE = ACCENT = TEXT = MUTED = EVEN = ODD = ""
 BTN2 = BTN2H = DANGER = DANGERH = SIDE_HOVER = ACCENT_HOVER = ""
+SUCCESS = DANGER_TEXT = SUCCESS_BTN = SUCCESS_BTNH = ROW_BLOCK = WARN = ""
 _cur = _PALETTES["dark"]
 
 
@@ -55,6 +60,7 @@ def style_tree():
     p = _cur
     st = ttk.Style()
     st.theme_use("clam")
+    st.layout("Treeview", [("Treeview.treearea", {"sticky": "nswe"})])   # no light outer border
     st.configure("Treeview", background=p["PANEL"], fieldbackground=p["PANEL"], foreground=p["TEXT"],
                  rowheight=27, borderwidth=0, font=("Segoe UI", 10))
     st.configure("Treeview.Heading", background=p["HEAD"], foreground=p["TEXT"], relief="flat",

@@ -104,49 +104,58 @@ _T = {
     "logs.filter": {"uz": "Filtr…", "ru": "Фильтр…", "en": "Filter…"},
 
     # ---- access control ----
-    "access.help": {"uz": "Ruxsat berilgan va bloklangan qurilmalar alohida ro'yxatlarda. "
-                          "Ikkala ro'yxatda ham yo'q qurilmalar uchun quyidagi standart amal qo'llanadi.",
-                    "ru": "Разрешённые и заблокированные устройства — в отдельных списках. "
-                          "Для устройств, которых нет ни в одном списке, применяется действие ниже.",
-                    "en": "Allowed and blocked devices live in separate lists. Devices in neither "
-                          "list get the default action below."},
-    "access.default_label": {"uz": "Ro'yxatda yo'q qurilmalar uchun:",
-                             "ru": "Для устройств не из списков:", "en": "For devices in neither list:"},
+    "access.rule_title": {"uz": "Faqat ruxsat berilgan USB xotiralar ishlaydi",
+                          "ru": "Работают только разрешённые USB-накопители",
+                          "en": "Only allowed USB storage devices work"},
+    "access.rule_text": {"uz": "Ro'yxatda ruxsat berilmagan har qanday fleshka yoki USB disk ulanishi bilan "
+                               "avtomatik bloklanadi (Windows'da o'chiriladi). Qurilmani ishlatish uchun uni "
+                               "tanlab «Ruxsat berish» tugmasini bosing.",
+                         "ru": "Любая флешка или USB-диск без разрешения автоматически блокируется при "
+                               "подключении (отключается в Windows). Чтобы пользоваться устройством, выберите "
+                               "его и нажмите «Разрешить».",
+                         "en": "Any flash drive or USB disk that is not allowed is blocked (disabled in "
+                               "Windows) as soon as it is plugged in. To use a device, select it and press "
+                               "\"Allow\"."},
     "access.enforce": {"uz": "Kirish nazorati", "ru": "Контроль доступа", "en": "Access control"},
-    "access.enforce_off_warn": {"uz": "Kirish nazorati o'chirilsa, «Bloklangan» ro'yxatidagi USB'lar "
-                                      "ham bloklanmaydi.\n\nO'chirilsinmi?",
-                                "ru": "Если выключить контроль доступа, USB из списка «Заблокированные» "
-                                      "тоже не будут блокироваться.\n\nВыключить?",
-                                "en": "With access control off, USB devices in the Blocked list are "
-                                      "not blocked either.\n\nTurn it off?"},
-    "access.default_allow": {"uz": "Ruxsat berish", "ru": "Разрешать", "en": "Allow"},
-    "access.default_block": {"uz": "Bloklash", "ru": "Блокировать", "en": "Block"},
-    "access.tab_all": {"uz": "Barcha qurilmalar", "ru": "Все устройства", "en": "All devices"},
-    "access.tab_allowed": {"uz": "Ruxsat berilgan", "ru": "Разрешённые", "en": "Allowed"},
-    "access.tab_blocked": {"uz": "Bloklangan", "ru": "Заблокированные", "en": "Blocked"},
-    "access.to_allowed": {"uz": "Ruxsatga qo'shish", "ru": "В разрешённые", "en": "Add to allowed"},
-    "access.to_blocked": {"uz": "Blokka qo'shish", "ru": "В заблокированные", "en": "Add to blocked"},
-    "access.remove": {"uz": "Ro'yxatdan olib tashlash", "ru": "Убрать из списка", "en": "Remove from list"},
-    "access.add_manual": {"uz": "Seriya bo'yicha qo'shish…", "ru": "Добавить по серии…",
-                          "en": "Add by serial…"},
+    "access.off_title": {"uz": "Kirish nazorati o'chiq — barcha USB xotiralar ishlaydi",
+                         "ru": "Контроль доступа выключен — работают все USB-накопители",
+                         "en": "Access control is off — every USB storage device works"},
+    "access.off_text": {"uz": "Hech qaysi qurilma bloklanmaydi, avval bloklanganlari qayta yoqildi. Ruxsat "
+                              "ro'yxati saqlanib qoladi va nazorat yoqilganda yana qo'llanadi.",
+                        "ru": "Ни одно устройство не блокируется, ранее заблокированные снова включены. "
+                              "Список разрешённых сохраняется и снова применяется при включении контроля.",
+                        "en": "No device is blocked and previously blocked ones were re-enabled. The "
+                              "Allowed list is kept and applies again when access control is turned on."},
+    "access.off_confirm": {"uz": "Kirish nazorati o'chirilsinmi?\n\nBarcha USB xotiralar, shu jumladan "
+                                 "ruxsat berilmaganlari ham ishlay boshlaydi.",
+                           "ru": "Выключить контроль доступа?\n\nЗаработают все USB-накопители, включая "
+                                 "неразрешённые.",
+                           "en": "Turn access control off?\n\nEvery USB storage device will work, including "
+                                 "ones that are not allowed."},
+    "access.not_allowed": {"uz": "Ruxsatsiz", "ru": "Не разрешено", "en": "Not allowed"},
+    "access.need_admin": {"uz": "Administrator huquqi yo'q — bloklash ishlamaydi",
+                          "ru": "Нет прав администратора — блокировка не работает",
+                          "en": "Not running as Administrator — blocking is off"},
+    "access.stat_allowed": {"uz": "Ruxsat berilgan", "ru": "Разрешено", "en": "Allowed"},
+    "access.stat_blocked": {"uz": "Bloklangan", "ru": "Заблокировано", "en": "Blocked"},
+    "access.stat_connected": {"uz": "Hozir ulangan", "ru": "Подключено сейчас", "en": "Connected now"},
+    "access.filter_all": {"uz": "Hammasi", "ru": "Все", "en": "All"},
+    "access.allowed": {"uz": "Ruxsat berilgan", "ru": "Разрешено", "en": "Allowed"},
+    "access.blocked": {"uz": "Bloklangan", "ru": "Заблокировано", "en": "Blocked"},
+    "access.do_allow": {"uz": "✓  Ruxsat berish", "ru": "✓  Разрешить", "en": "✓  Allow"},
+    "access.do_block": {"uz": "✕  Bloklash", "ru": "✕  Заблокировать", "en": "✕  Block"},
+    "access.add_manual": {"uz": "+  Seriya bo'yicha ruxsat…", "ru": "+  Разрешить по серии…",
+                          "en": "+  Allow by serial…"},
+    "access.manual_name": {"uz": "(qo'lda qo'shilgan)", "ru": "(добавлено вручную)", "en": "(added manually)"},
     "access.select_first": {"uz": "Avval ro'yxatdan qurilma tanlang.",
                             "ru": "Сначала выберите устройство в списке.",
                             "en": "Select a device in the list first."},
-    "access.add_prompt": {"uz": "Qurilma seriya raqami (Serial ustunidagi kabi):",
-                          "ru": "Серийный номер устройства (как в столбце Serial):",
-                          "en": "Device serial number (as in the Serial column):"},
+    "access.add_prompt": {"uz": "Ruxsat beriladigan qurilma seriya raqami (Seriya ustunidagi kabi):",
+                          "ru": "Серийный номер разрешаемого устройства (как в столбце Серия):",
+                          "en": "Serial number of the device to allow (as in the Serial column):"},
     "access.state_connected": {"uz": "Ulangan", "ru": "Подключено", "en": "Connected"},
-    "access.state_blocked": {"uz": "Bloklangan (o'chirilgan)", "ru": "Заблокировано (отключено)",
-                             "en": "Blocked (disabled)"},
-    "access.whitelist_warn": {"uz": "«Bloklash» rejimida whitelist'da bo'lmagan har bir USB xotira "
-                                   "qurilmasi o'chiriladi (Administrator kerak).\n\nMaslahat: avval ulangan "
-                                   "qurilmalarni ruxsatga qo'shing.\n\nDavom etilsinmi?",
-                              "ru": "В режиме «Блокировать» каждое USB-накопитель не из whitelist будет "
-                                   "отключено (нужен администратор).\n\nСовет: сначала добавьте подключённые "
-                                   "устройства в разрешённые.\n\nПродолжить?",
-                              "en": "In Block mode every USB storage device not on the whitelist will be "
-                                   "disabled (Administrator required).\n\nTip: add connected devices to "
-                                   "allowed first.\n\nContinue?"},
+    "access.state_blocked": {"uz": "O'chirilgan", "ru": "Отключено", "en": "Disabled"},
+    "access.state_offline": {"uz": "Ulanmagan", "ru": "Не подключено", "en": "Not connected"},
 
     # ---- settings ----
     "settings.autostart": {"uz": "Windows bilan avtomatik ishga tushsin",
@@ -198,6 +207,7 @@ _T = {
     "col.free": {"uz": "Bo'sh (oxirgi)", "ru": "Свободно (посл.)", "en": "Free (last seen)"},
     "col.state": {"uz": "Holat", "ru": "Состояние", "en": "State"},
     "col.list": {"uz": "Ro'yxat", "ru": "Список", "en": "List"},
+    "col.access": {"uz": "Ruxsat", "ru": "Доступ", "en": "Access"},
     "col.time": {"uz": "Vaqt", "ru": "Время", "en": "Time"},
     "col.drive": {"uz": "Disk", "ru": "Диск", "en": "Drive"},
     "col.action": {"uz": "Amal", "ru": "Действие", "en": "Action"},

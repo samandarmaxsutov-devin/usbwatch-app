@@ -14,7 +14,8 @@ def header(parent, title):
     h = ctk.CTkFrame(parent, fg_color="transparent")
     h.grid(row=0, column=0, sticky="ew", pady=(0, 14))
     ctk.CTkLabel(h, text=title, font=ctk.CTkFont(size=24, weight="bold")).pack(side="left")
-    tools = ctk.CTkFrame(h, fg_color="transparent")
+    # tiny default size: an empty CTkFrame is 200x200 and would make the title row that tall
+    tools = ctk.CTkFrame(h, fg_color="transparent", width=1, height=1)
     tools.pack(side="right")
     return tools
 
@@ -30,18 +31,21 @@ def make_tree(parent, cols, widths, stretch=(), sortable=True):
         else:
             t.heading(c, text=c, anchor="w")
         t.column(c, width=w, minwidth=max(45, w // 2), anchor="w", stretch=c in stretch)
-    vsb = ttk.Scrollbar(fr, orient="vertical", command=t.yview)
-    hsb = ttk.Scrollbar(fr, orient="horizontal", command=t.xview)
+    # ctk scrollbars follow the light/dark palette (ttk ones render light grey on dark)
+    vsb = ctk.CTkScrollbar(fr, orientation="vertical", command=t.yview, width=12)
+    hsb = ctk.CTkScrollbar(fr, orientation="horizontal", command=t.xview, height=12)
     t.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-    t.grid(row=0, column=0, sticky="nsew", padx=(8, 0), pady=(8, 0))
-    vsb.grid(row=0, column=1, sticky="ns", pady=(8, 0), padx=(0, 6))
-    hsb.grid(row=1, column=0, sticky="ew", padx=(8, 0), pady=(0, 6))
+    t.grid(row=0, column=0, sticky="nsew", padx=(10, 0), pady=(10, 0))
+    vsb.grid(row=0, column=1, sticky="ns", pady=(10, 0), padx=(2, 6))
+    hsb.grid(row=1, column=0, sticky="ew", padx=(10, 0), pady=(2, 8))
     fr.grid_columnconfigure(0, weight=1)
     fr.grid_rowconfigure(0, weight=1)
     t.tag_configure("evenrow", background=theme.EVEN)
     t.tag_configure("oddrow", background=theme.ODD)
     for tag, color in theme.TAG_COLORS.items():
         t.tag_configure(tag, foreground=color)
+    t.tag_configure("acl_block", foreground=theme.ROW_BLOCK)
+    t.tag_configure("acl_live", font=("Segoe UI", 10, "bold"))
     return fr, t
 
 
@@ -72,12 +76,14 @@ def _sort(tree, col):
 
 
 def fill_tree(tree, rows):
-    """rows: list of dicts {values, tag?, iid?}. Replaces the tree contents, with striping."""
+    """rows: list of dicts {values, tag?, iid?}; tag is a name or a tuple of names.
+    Replaces the tree contents, with striping."""
     tree.delete(*tree.get_children())
     for i, r in enumerate(rows):
         tags = ["evenrow" if i % 2 == 0 else "oddrow"]
-        if r.get("tag"):
-            tags.append(r["tag"])
+        tag = r.get("tag")
+        if tag:
+            tags.extend([tag] if isinstance(tag, str) else tag)
         tree.insert("", "end", iid=r.get("iid", str(i)), values=r["values"], tags=tuple(tags))
     if getattr(tree, "_sort", None) and tree._sort["col"] in tree["columns"]:
         _resort_current(tree)

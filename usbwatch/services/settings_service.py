@@ -33,17 +33,6 @@ def update_cfg(**kw):
     return c
 
 
-def policy_settings(cfg: dict):
-    """(enforcement on, default action 'allow'|'block') for access control.
-
-    Migrates the old single `policy_mode` (off / blacklist / whitelist): its "off" also
-    ignored the Blocked list, so it maps to enforcement on with unknown devices allowed."""
-    mode = cfg.get("policy_mode", "off")
-    on = cfg.get("policy_on", True)
-    default = cfg.get("policy_default", "block" if mode == "whitelist" else "allow")
-    return bool(on), default
-
-
 # ---------- password ----------
 def _hash_pw(pw, salt):
     return hashlib.pbkdf2_hmac("sha256", pw.encode(), salt, 200_000).hex()

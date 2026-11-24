@@ -4,7 +4,7 @@ from tkinter import messagebox
 
 import customtkinter as ctk
 
-from .. import config, i18n
+from .. import config, i18n, single_instance
 from ..services import settings_service
 from ..viewmodels.shell_vm import ShellViewModel
 from . import appicon, theme, widgets
@@ -51,6 +51,7 @@ class MainWindow(ctk.CTk):
                          on_exit=lambda: self.after(0, self._exit_flow))
         self.has_tray = self.tray.start()
         self.protocol("WM_DELETE_WINDOW", self.on_close)
+        single_instance.listen(lambda: self.after(0, self._show_from_launch))
 
     # ---- UI construction ----
     def _build_ui(self):
@@ -143,6 +144,15 @@ class MainWindow(ctk.CTk):
             self._hide()
         else:
             self._exit_flow()
+
+    def _show_from_launch(self):
+        """The app was launched again while running: show this copy instead."""
+        if self.state() == "withdrawn":
+            self._open_from_tray()          # hidden in the tray -> asks for the password
+            return
+        self.deiconify()
+        self.lift()
+        self.focus_force()
 
     def _open_from_tray(self):
         if not settings_service.has_password():
